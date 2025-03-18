@@ -23,6 +23,27 @@ def load_spacy_model(model_name):
 # Load the Spacy model
 nlp = load_spacy_model("en_core_web_lg")
 
+#storing the files in the csv format for performance score
+import csv
+
+def save_performance_score(name, email, match_score):
+    file_name = "performance_scores.csv"
+    headers = ["Name", "Email", "Match Score"]
+
+    # Check if the file exists
+    file_exists = os.path.isfile(file_name)
+
+    # Open the file in append mode
+    with open(file_name, mode="a", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        # Write the headers if the file is new
+        if not file_exists:
+            writer.writerow(headers)
+
+        # Write the performance data
+        writer.writerow([name, email, match_score])
+
 def extract_text_from_pdf(pdf_file):
     return extract_text(pdf_file)
 
@@ -63,7 +84,7 @@ def extract_candidate_name(text):
     lines = text.splitlines()
     common_generic_words = ['resume', 'curriculum vitae', 'cv']
     
-    for line in lines[:10]:  #check the first 10 lines for the name
+    for line in lines[:10]:  # Check the first 10 lines for the name
         clean_line = line.strip()
         if clean_line.lower() not in common_generic_words and len(clean_line.split()) > 1:
             return clean_line
@@ -78,7 +99,6 @@ Upload multiple résumés and enter the job description to see which résumé ma
 """)
 
 uploaded_files = st.file_uploader("Upload Résumés (PDF)", type="pdf", accept_multiple_files=True)
-
 job_description = st.text_area("Enter Job Description", height=150)
 
 if st.button('Analyze Résumés'):
@@ -92,19 +112,24 @@ if st.button('Analyze Résumés'):
             best_candidate_name = None
 
             for uploaded_file in uploaded_files:
-                resume_text = extract_text_from_pdf(uploaded_file)
-                
+                pdf_bytes = uploaded_file.getvalue()  # Read the file as bytes
+                resume_text = extract_text_from_pdf(pdf_bytes)
+
                 match_percentage = calculate_percentage_match(resume_text, job_description)
                 semantic_sim = semantic_similarity(resume_text, job_description)
                 match_score = (match_percentage + semantic_sim * 100) / 2
 
                 if match_score > best_match_score:
                     best_match_score = match_score
-                    best_resume_pdf = uploaded_file.getvalue()
+                    best_resume_pdf = pdf_bytes  # Store bytes for PDF display
                     best_resume_name = uploaded_file.name
                     best_resume_text = resume_text
                     best_candidate_email = extract_email(resume_text)
                     best_candidate_name = extract_candidate_name(resume_text)
+
+                # Save the performance score for each resume
+                save_performance_score(best_candidate_name, best_candidate_email, best_match_score)
+
 
 
             st.markdown("### Best Matched Résumé:")
@@ -114,10 +139,16 @@ if st.button('Analyze Résumés'):
                 st.write(f"Email ID: {best_candidate_email}")
             else:
                 st.write("Email ID: Not found")
+            
 
             base64_pdf = base64.b64encode(best_resume_pdf).decode('utf-8')
             pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="1000" height="900" type="application/pdf"></iframe>'
             st.markdown(pdf_display, unsafe_allow_html=True)
             st.download_button("Download Best Matched Résumé", data=best_resume_pdf, file_name=best_resume_name)
+            if st.button("View Performance Scores"):
+                with open("performance_scores.csv", "r") as file:
+                    scores = file.read()
+                st.text(scores)
+                
     else:
         st.error("Please upload résumés and enter job descriptions.")
