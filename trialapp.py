@@ -4,154 +4,84 @@ from pdfminer.high_level import extract_text
 import spacy
 from collections import Counter
 import base64
-import re
-import subprocess
-import os
-from io import BytesIO
 
-# Check if the Spacy model is installed; if not, download it
-def load_spacy_model(model_name):
-    try:
-        return spacy.load(model_name)
-    except OSError:
-        print(f"Model '{model_name}' not found. Attempting to download...")
-        subprocess.check_call(["python", "-m", "spacy", "download", model_name])
-        return spacy.load(model_name)
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return None
+# Load SpaCy model
+try:
+    nlp = spacy.load("en_core_web_sm")
+except Exception as e:
+    st.error(f"Error loading SpaCy model: {e}")
+    nlp = None
 
-# Load the Spacy model
-nlp = load_spacy_model("en_core_web_lg")
 
-#storing the files in the csv format for performance score
-import csv
-
-def save_performance_score(name, email, match_score):
-    file_name = "performance_scores.csv"
-    headers = ["Name", "Email", "Match Score"]
-
-    # Check if the file exists
-    file_exists = os.path.isfile(file_name)
-
-    # Open the file in append mode
-    with open(file_name, mode="a", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-
-        # Write the headers if the file is new
-        if not file_exists:
-            writer.writerow(headers)
-
-        # Write the performance data
-        writer.writerow([name, email, match_score])
-
+# Function to extract text from PDF
 def extract_text_from_pdf(pdf_bytes):
-    """Extracts text from PDF bytes."""
-    pdf_file = BytesIO(pdf_bytes)  # Convert bytes to file-like object
-    return extract_text(pdf_file)
+    try:
+        pdf_file = io.BytesIO(pdf_bytes)  # Use BytesIO to read bytes
+        text = extract_text(pdf_file)
+        return text
+    except Exception as e:
+        st.error(f"Error extracting PDF text: {e}")
+        return ""
 
+
+# Function to tokenize words and remove stopwords
 def word_tokenize(text):
-    doc = nlp(text)
-    return [token.text.lower() for token in doc if not token.is_punct and not token.is_space]
+    """Tokenizes and filters stopwords from the text."""
+    if not text or not isinstance(text, str):
+        return []  # Return empty list if invalid input
 
-def compute_keyword_match(text, keywords):
-    words = word_tokenize(text)
-    stop_words = set(spacy.lang.en.stop_words.STOP_WORDS)
-    filtered_words = [word for word in words if word.isalnum() and word not in stop_words]
-    
-    word_count = Counter(filtered_words)
-    keyword_count = sum(word_count[keyword] for keyword in keywords if keyword in word_count)
-    
-    return keyword_count
-
-def calculate_percentage_match(text, job_description):
-    job_keywords = set(word_tokenize(job_description.lower()))
-    text_keywords_count = compute_keyword_match(text, job_keywords)
-    total_keywords = len(job_keywords)
-    
-    if total_keywords == 0:
-        return 0
-    return (text_keywords_count / total_keywords) * 100
-
-def semantic_similarity(text1, text2):
-    doc1 = nlp(text1)
-    doc2 = nlp(text2)
-    return doc1.similarity(doc2)
-
-def extract_email(text):
-    email_pattern = r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'
-    email_matches = re.findall(email_pattern, text)
-    return email_matches[0] if email_matches else None
-
-def extract_candidate_name(text):
-    lines = text.splitlines()
-    common_generic_words = ['resume', 'curriculum vitae', 'cv']
-    
-    for line in lines[:10]:  # Check the first 10 lines for the name
-        clean_line = line.strip()
-        if clean_line.lower() not in common_generic_words and len(clean_line.split()) > 1:
-            return clean_line
-    return None
-
-st.set_page_config(page_title="Résumé Match Predictor", layout="wide")
-st.title('Résumé-Internship Match Predictor')
-
-st.markdown("""
-**Welcome!**
-Upload multiple résumés and enter the job description to see which résumé matches best!
-""")
-
-uploaded_files = st.file_uploader("Upload Résumés (PDF)", type="pdf", accept_multiple_files=True)
-job_description = st.text_area("Enter Job Description", height=150)
-
-if st.button('Analyze Résumés'):
-    if uploaded_files and job_description:
-        with st.spinner('Processing...'):
-            best_resume_pdf = None
-            best_match_score = -1
-            best_resume_name = None
-            best_resume_text = None
-            best_candidate_email = None
-            best_candidate_name = None
-
-            for uploaded_file in uploaded_files:
-                pdf_bytes = uploaded_file.getvalue()  # Read the file as bytes
-                resume_text = extract_text_from_pdf(pdf_bytes)
-
-                match_percentage = calculate_percentage_match(resume_text, job_description)
-                semantic_sim = semantic_similarity(resume_text, job_description)
-                match_score = (match_percentage + semantic_sim * 100) / 2
-
-                if match_score > best_match_score:
-                    best_match_score = match_score
-                    best_resume_pdf = pdf_bytes  # Store bytes for PDF display
-                    best_resume_name = uploaded_file.name
-                    best_resume_text = resume_text
-                    best_candidate_email = extract_email(resume_text)
-                    best_candidate_name = extract_candidate_name(resume_text)
-
-                # Save the performance score for each resume
-                save_performance_score(best_candidate_name, best_candidate_email, best_match_score)
+    try:
+        doc = nlp(text)
+        tokens = [token.text for token in doc if not token.is_stop and token.is_alpha]
+        return tokens
+    except Exception as e:
+        st.error(f"Error during tokenization: {e}")
+        return []
 
 
+# Function to calculate keyword match percentage
+def calculate_percentage_match(resume_text, job_description):
+    try:
+        # Tokenize and create sets of keywords
+        resume_keywords = set(word_tokenize(resume_text))
+        job_keywords = set(word_tokenize(job_description.lower()))
 
-            st.markdown("### Best Matched Résumé:")
-            st.write(f"**{best_candidate_name}** is best suited for this internship with a combined match score of {best_match_score:.2f}%")
-            
-            if best_candidate_email:
-                st.write(f"Email ID: {best_candidate_email}")
-            else:
-                st.write("Email ID: Not found")
-            
+        # Ensure both have valid tokens
+        if not resume_keywords or not job_keywords:
+            return 0.0
 
-            base64_pdf = base64.b64encode(best_resume_pdf).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="1000" height="900" type="application/pdf"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
-            st.download_button("Download Best Matched Résumé", data=best_resume_pdf, file_name=best_resume_name)
-            if st.button("View Performance Scores"):
-                with open("performance_scores.csv", "r") as file:
-                    scores = file.read()
-                st.text(scores)
-                
-    else:
-        st.error("Please upload résumés and enter job descriptions.")
+        # Calculate match percentage
+        common_keywords = resume_keywords.intersection(job_keywords)
+        match_percentage = (len(common_keywords) / len(job_keywords)) * 100
+
+        return round(match_percentage, 2)
+    except Exception as e:
+        st.error(f"Error calculating match percentage: {e}")
+        return 0.0
+
+
+# Streamlit App
+st.title("Resume Match Percentage")
+
+uploaded_file = st.file_uploader("Upload your resume (PDF)", type="pdf")
+job_description = st.text_area("Enter job description")
+
+if uploaded_file and job_description:
+    try:
+        # Extract text from uploaded PDF
+        pdf_bytes = uploaded_file.read()
+        resume_text = extract_text_from_pdf(pdf_bytes)
+
+        # Ensure resume is not empty
+        if not resume_text.strip():
+            st.error("The PDF appears to be empty or unreadable.")
+        else:
+            # Calculate match percentage
+            match_percentage = calculate_percentage_match(resume_text, job_description)
+
+            # Display match percentage
+            st.success(f"Match Percentage: {match_percentage:.2f}%")
+
+    except Exception as e:
+        st.error(f"Unexpected error: {e}")
+
