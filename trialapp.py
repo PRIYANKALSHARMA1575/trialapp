@@ -7,6 +7,7 @@ import base64
 import re
 import subprocess
 import os
+from io import BytesIO
 
 # Check if the Spacy model is installed; if not, download it
 def load_spacy_model(model_name):
@@ -44,7 +45,9 @@ def save_performance_score(name, email, match_score):
         # Write the performance data
         writer.writerow([name, email, match_score])
 
-def extract_text_from_pdf(pdf_file):
+def extract_text_from_pdf(pdf_bytes):
+    """Extracts text from PDF bytes."""
+    pdf_file = BytesIO(pdf_bytes)  # Convert bytes to file-like object
     return extract_text(pdf_file)
 
 def word_tokenize(text):
