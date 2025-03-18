@@ -23,27 +23,6 @@ def load_spacy_model(model_name):
 # Load the Spacy model
 nlp = load_spacy_model("en_core_web_lg")
 
-#storing the files in the csv format for performance score
-import csv
-
-def save_performance_score(name, email, match_score):
-    file_name = "performance_scores.csv"
-    headers = ["Name", "Email", "Match Score"]
-
-    # Check if the file exists
-    file_exists = os.path.isfile(file_name)
-
-    # Open the file in append mode
-    with open(file_name, mode="a", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-
-        # Write the headers if the file is new
-        if not file_exists:
-            writer.writerow(headers)
-
-        # Write the performance data
-        writer.writerow([name, email, match_score])
-
 def extract_text_from_pdf(pdf_file):
     return extract_text(pdf_file)
 
@@ -127,10 +106,6 @@ if st.button('Analyze Résumés'):
                     best_candidate_email = extract_email(resume_text)
                     best_candidate_name = extract_candidate_name(resume_text)
 
-                # Save the performance score for each resume
-                save_performance_score(best_candidate_name, best_candidate_email, best_match_score)
-
-
 
             st.markdown("### Best Matched Résumé:")
             st.write(f"**{best_candidate_name}** is best suited for this internship with a combined match score of {best_match_score:.2f}%")
@@ -139,16 +114,10 @@ if st.button('Analyze Résumés'):
                 st.write(f"Email ID: {best_candidate_email}")
             else:
                 st.write("Email ID: Not found")
-            
 
             base64_pdf = base64.b64encode(best_resume_pdf).decode('utf-8')
             pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="1000" height="900" type="application/pdf"></iframe>'
             st.markdown(pdf_display, unsafe_allow_html=True)
             st.download_button("Download Best Matched Résumé", data=best_resume_pdf, file_name=best_resume_name)
-            if st.button("View Performance Scores"):
-                with open("performance_scores.csv", "r") as file:
-                    scores = file.read()
-                st.text(scores)
-                
     else:
         st.error("Please upload résumés and enter job descriptions.")
